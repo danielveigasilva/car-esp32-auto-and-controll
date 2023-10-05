@@ -11,9 +11,6 @@
 #define RIGHT_FRONT  33
 #define RIGHT_BACK  32
 
-#define LEFT_SPEED   -1
-#define RIGHT_SPEED  -1
-
 #define BUZZER      21
 
 #define LED_MANUAL_X    4
@@ -27,10 +24,10 @@ ControllType controllType = MANUAL_BASIC;
 void setDirection(Direction direction){
   int directionInt = (int)direction;
   std::bitset<4> directionBits(directionInt);
-  digitalWrite(LEFT_FRONT,  directionBits[3]);
-  digitalWrite(LEFT_BACK,   directionBits[2]);
-  digitalWrite(RIGHT_FRONT,  directionBits[1]);
-  digitalWrite(RIGHT_BACK,  directionBits[0]);
+  analogWrite(LEFT_FRONT,  directionBits[3] == 1 ? 255 : 0);
+  analogWrite(LEFT_BACK,   directionBits[2] == 1 ? 255 : 0);
+  analogWrite(RIGHT_FRONT,  directionBits[1] == 1 ? 255 : 0);
+  analogWrite(RIGHT_BACK,  directionBits[0] == 1 ? 255 : 0);
 }
 
 void setControllType(ControllType newType){
@@ -79,7 +76,7 @@ void controllEvent() {
   if (PS4.event.button_down.options)
       setControllType(controllType != AUTO_PILLOT ? AUTO_PILLOT : MANUAL_BASIC);
 
-  if (PS4.event.button_down.share && !auto_pillot)
+  if (PS4.event.button_down.share)
     setControllType(controllType != MANUAL_ACC ? MANUAL_ACC : MANUAL_BASIC);
 }
 
@@ -135,13 +132,14 @@ void controllLogicManualAcc(){
 }
 
 int convertStickValue(int value, int min, int max){
+
   if (value < 0)
     value *= -1;
 
-  int newValue = map(value, min, max, 0, 255);
+  int newValue = map(value, min, max, 50, 255);
   if (newValue > 255)
     newValue = 255;
-  if (newValue < 0)
+  if (newValue < 80)
     newValue = 0;
 
   return newValue;
@@ -155,14 +153,10 @@ void controllLogicManualBasicAng(){
   int leftAnalogValue = convertStickValue(yLeft, 0, 127);
   int rightAnalogValue = convertStickValue(yRight, 0, 127);
 
-  digitalWrite(LEFT_FRONT,  yLeft > 0 ? HIGH : LOW);
-  digitalWrite(LEFT_BACK,   yLeft < 0 ? HIGH : LOW);
-  digitalWrite(RIGHT_FRONT,  yRight > 0 ? HIGH : LOW);
-  digitalWrite(RIGHT_BACK,  yRight < 0 ? HIGH : LOW);
-
-  //TODO: Ajuste Analogico
-  //analogWrite(LEFT_SPEED,leftAnalogValue);
-  //analogWrite(RIGHT_SPEED,leftAnalogValue);
+  analogWrite(LEFT_FRONT,  yLeft >= 0 ? leftAnalogValue : 0);
+  analogWrite(LEFT_BACK,   yLeft < 0 ? leftAnalogValue : 0);
+  analogWrite(RIGHT_FRONT,  yRight >= 0 ? rightAnalogValue : 0);
+  analogWrite(RIGHT_BACK,  yRight < 0 ? rightAnalogValue : 0);
 }
 
 void setup() {
@@ -184,8 +178,8 @@ void loop() {
         controllLogicAutoPillot();
         break;
       case MANUAL_BASIC:
-        //controllLogicManualBasicAng();
-        controllLogicManualBasicDigital();
+        controllLogicManualBasicAng();
+        //controllLogicManualBasicDigital();
         break;
       case MANUAL_ACC:
         controllLogicManualAcc();
