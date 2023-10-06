@@ -2,6 +2,7 @@
 
 #include <PS4Controller.h>
 #include <bitset>
+#include "pitches.h" 
 
 #define ULTRA_TRIC  13
 #define ULTRA_ECHO  12
@@ -12,6 +13,7 @@
 #define RIGHT_BACK  32
 
 #define BUZZER      21
+#define BUZZER_CHANNEL 0
 
 #define LED_MANUAL_X    4
 #define LED_AUTO_PILLOT 16
@@ -20,6 +22,60 @@ enum Direction {STOP=0, GO_TO_FRONT=10, GO_TO_BACK=5, GO_TO_LEFT=9, GO_TO_RIGHT=
 enum ControllType {MANUAL_BASIC, MANUAL_ACC, AUTO_PILLOT};
 
 ControllType controllType = MANUAL_BASIC;
+
+void soundStarWars(){
+  int melody[] = {
+    NOTE_AS4, NOTE_AS4, NOTE_AS4,
+    NOTE_F5, NOTE_C6,
+    NOTE_AS5, NOTE_A5, NOTE_G5, NOTE_F6, NOTE_C6,
+    NOTE_AS5, NOTE_A5, NOTE_G5, NOTE_F6, NOTE_C6,
+    NOTE_AS5, NOTE_A5, NOTE_AS5, NOTE_G5
+  };
+
+  int durations[] = {
+    8, 8, 8,
+    2, 2,
+    8, 8, 8, 2, 4,
+    8, 8, 8, 2, 4,
+    8, 8, 8, 2
+  };
+
+  int size = sizeof(durations) / sizeof(int);
+  for (int note = 0; note < size; note++) {
+    int duration = 1000 / durations[note];
+    ledcWrite(BUZZER_CHANNEL, duration);
+    tone(BUZZER, melody[note], duration);
+    int pauseBetweenNotes = duration * 1.30;
+    delay(pauseBetweenNotes);
+    ledcWrite(BUZZER_CHANNEL, 0);
+  }
+}
+
+void soundConnectControll(){
+  ledcWrite(BUZZER_CHANNEL, 125);
+  tone(BUZZER,NOTE_B5);
+  delay(100);
+  tone(BUZZER,NOTE_E6);
+  delay(800);
+  ledcWrite(BUZZER_CHANNEL, 0);
+}
+
+void soundTurnOn(){
+  ledcWrite(BUZZER_CHANNEL, 125);
+  tone(BUZZER,NOTE_E6);
+  delay(130);
+  tone(BUZZER,NOTE_G6);
+  delay(130);
+  tone(BUZZER,NOTE_E7);
+  delay(130);
+  tone(BUZZER,NOTE_C7);
+  delay(130);
+  tone(BUZZER,NOTE_D7);
+  delay(130);
+  tone(BUZZER,NOTE_G7);
+  delay(125);
+  ledcWrite(BUZZER_CHANNEL, 0);
+}
 
 void setDirection(Direction direction){
   int directionInt = (int)direction;
@@ -67,8 +123,8 @@ void connectControll(){
     state = !state;
     delay(250);
   }
-  
   setControllType(MANUAL_BASIC);
+  soundConnectControll();
 }
 
 void controllEvent() {
@@ -78,8 +134,13 @@ void controllEvent() {
 
   if (PS4.event.button_down.share)
     setControllType(controllType != MANUAL_ACC ? MANUAL_ACC : MANUAL_BASIC);
+  
+  if (PS4.event.button_down.square)
+    soundTurnOn();
+  
+  if (PS4.event.button_down.triangle)
+    soundStarWars();
 }
-
 
 void controllLogicAutoPillot(){
   Ultrasonic ultrasonic(ULTRA_TRIC, ULTRA_ECHO);
@@ -153,10 +214,10 @@ void controllLogicManualBasicAng(){
   int leftAnalogValue = convertStickValue(yLeft, 0, 127);
   int rightAnalogValue = convertStickValue(yRight, 0, 127);
 
-  analogWrite(LEFT_FRONT,  yLeft >= 0 ? leftAnalogValue : 0);
-  analogWrite(LEFT_BACK,   yLeft < 0 ? leftAnalogValue : 0);
-  analogWrite(RIGHT_FRONT,  yRight >= 0 ? rightAnalogValue : 0);
-  analogWrite(RIGHT_BACK,  yRight < 0 ? rightAnalogValue : 0);
+  analogWrite(LEFT_FRONT,   yLeft > 0   ? leftAnalogValue   : 0);
+  analogWrite(LEFT_BACK,    yLeft < 0   ? leftAnalogValue   : 0);
+  analogWrite(RIGHT_FRONT,  yRight > 0  ? rightAnalogValue  : 0);
+  analogWrite(RIGHT_BACK,   yRight < 0  ? rightAnalogValue  : 0);
 }
 
 void setup() {
@@ -166,7 +227,13 @@ void setup() {
   pinMode(RIGHT_BACK, OUTPUT);
   pinMode(LED_MANUAL_X, OUTPUT);
   pinMode(LED_AUTO_PILLOT, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+
   Serial.begin(9600);
+
+  ledcSetup(BUZZER_CHANNEL, 2000, 8);
+  ledcAttachPin(BUZZER, BUZZER_CHANNEL);
+  soundTurnOn();
 
   connectControll();
 }
