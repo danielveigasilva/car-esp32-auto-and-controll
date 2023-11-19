@@ -1,41 +1,38 @@
-#import<Ultrasonic.h>
 
-#include <WiFi.h>
+#include "src/Ultrasonic/Ultrasonic.h"
+#include "src/PS4Controller/PS4Controller.h"
+#include "src/Pitches/pitches.h" 
+#include "src/LiquidCrystal_I2C/LiquidCrystal_I2C.h"
 
-#include <PS4Controller.h>
-#include <bitset>
-#include "pitches.h" 
+#include "src/FreeRTOS/FreeRTOS.h"
+#include "src/FreeRTOS/task.h"
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <esp_ipc.h>
-
+#include <bitset>
 #include <iostream>
 #include <cstdlib>
-
-#include <sys/socket.h> 
 #include <arpa/inet.h> 
 
-#define ULTRA_TRIC  13
-#define ULTRA_ECHO  12
-
-#define LEFT_FRONT  27
-#define LEFT_BACK   25
-#define RIGHT_FRONT  33
-#define RIGHT_BACK  32
-
-#define BUZZER      21
-#define BUZZER_CHANNEL 0
-
+#define ULTRA_TRIC      13
+#define ULTRA_ECHO      12
+#define LEFT_FRONT      27
+#define LEFT_BACK       25
+#define RIGHT_FRONT     33
+#define RIGHT_BACK      32
+#define BUZZER          19
+#define BUZZER_CHANNEL  0
 #define LED_MANUAL_X    4
 #define LED_AUTO_PILLOT 16
 #define LED_WIFI        2
+#define DHTPIN          23
+#define TIMEOUT         8
+
+LiquidCrystal_I2C lcd(0x3F, 20, 4);
 
 enum Direction {STOP=0, GO_TO_FRONT=10, GO_TO_BACK=5, GO_TO_LEFT=9, GO_TO_RIGHT=6};
 enum ControllType {MANUAL_BASIC, MANUAL_ACC, AUTO_PILLOT};
 
 ControllType controllType = MANUAL_BASIC;
-//int socketServer = -1;
 
 TaskHandle_t taskSoundHandle = NULL;
 
@@ -107,10 +104,8 @@ void soundConnectControll(void * args){
   ledcWrite(BUZZER_CHANNEL, 125);
   tone(BUZZER,NOTE_B5);
   vTaskDelay(100 / portTICK_PERIOD_MS);
-  //delay(100);
   tone(BUZZER,NOTE_E6);
   vTaskDelay(800 / portTICK_PERIOD_MS);
-  //delay(800);
   ledcWrite(BUZZER_CHANNEL, 0);
   
   taskSoundHandle = NULL;
@@ -121,22 +116,16 @@ void soundTurnOn(void * args){
   ledcWrite(BUZZER_CHANNEL, 125);
   tone(BUZZER,NOTE_E6);
   vTaskDelay(130 / portTICK_PERIOD_MS);
-  //delay(130);
   tone(BUZZER,NOTE_G6);
   vTaskDelay(130 / portTICK_PERIOD_MS);
-  //delay(130);
   tone(BUZZER,NOTE_E7);
   vTaskDelay(130 / portTICK_PERIOD_MS);
-  //delay(130);
   tone(BUZZER,NOTE_C7);
   vTaskDelay(130 / portTICK_PERIOD_MS);
-  //delay(130);
   tone(BUZZER,NOTE_D7);
   vTaskDelay(130 / portTICK_PERIOD_MS);
-  //delay(130);
   tone(BUZZER,NOTE_G7);
   vTaskDelay(125 / portTICK_PERIOD_MS);
-  //delay(125);
   ledcWrite(BUZZER_CHANNEL, 0);
   
   taskSoundHandle = NULL;
@@ -173,12 +162,6 @@ void setDirection(Direction direction, int speed = 255){
   analogWrite(LEFT_BACK,   directionBits[2] == 1 ? speed : 0);
   analogWrite(RIGHT_FRONT, directionBits[1] == 1 ? speed : 0);
   analogWrite(RIGHT_BACK,  directionBits[0] == 1 ? speed : 0);
-  /*
-  if (socketServer < 0)
-    connectSocket();
-  else
-    sendInt(direction, socketServer);
-  */
 }
 
 void setControllType(ControllType newType){
@@ -191,6 +174,10 @@ void setControllType(ControllType newType){
       digitalWrite(LED_AUTO_PILLOT, HIGH);
       PS4.setLed(0, 100, 0);
       PS4.sendToController();
+
+      lcd.clear();
+      lcd.setCursor(1,1);
+      lcd.print("Auto-Piloto");
       break;
     case MANUAL_BASIC:
       setDirection(STOP);
@@ -198,57 +185,22 @@ void setControllType(ControllType newType){
       digitalWrite(LED_AUTO_PILLOT, LOW);
       PS4.setLed(100, 100, 0);
       PS4.sendToController();
+
+      lcd.clear();
+      lcd.setCursor(1,1);
+      lcd.print("Controle Manual");
       break;
     case MANUAL_ACC:
       PS4.setLed(0, 0, 100);
       PS4.sendToController();
+
+      lcd.clear();
+      lcd.setCursor(1,1);
+      lcd.print("Controle Manual ACC");
       break;
   }
 }
-/*
-void sendInt( int value, int socket ){
-    send(socket, &value, sizeof(int), 0);    
-}
-*/
-/*
-void connectWifi(){
-  const char* SSID = "";
-  const char* PASSWORD = "";
-  
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(SSID, PASSWORD);
-  
-  bool state = HIGH;
-  while (WiFi.status() != WL_CONNECTED) {
-    digitalWrite(LED_WIFI, state);
-    state = !state;
-    delay(250);
-  }
 
-  digitalWrite(LED_WIFI, HIGH);
-  Serial.println(WiFi.localIP());
-}
-*/
-/*
-void connectSocket(){
-
-  struct sockaddr_in dest;
-  socketServer = socket(AF_INET, SOCK_STREAM, 0);
-
-  memset(&dest, 0, sizeof(dest));                
-  dest.sin_family = AF_INET;
-  dest.sin_addr.s_addr = inet_addr("192.168.1.18"); 
-  dest.sin_port = htons(12345); 
-
-  int connectResult = connect(socketServer, (struct sockaddr *)&dest, sizeof(struct sockaddr_in));
-  if( connectResult == - 1 ){
-    socketServer = -1;
-    Serial.println(F("Falha ao Conectado Socket"));
-  }
-  else
-    Serial.println(F("Socket Conectado"));
-}
-*/
 void controllEvent() {
 
   if (PS4.event.button_down.options)
@@ -306,19 +258,6 @@ void controllLogicAutoPillot(){
     setDirection(GO_TO_FRONT, speed);
 }
 
-void controllLogicManualBasicDigital(){
-  if (PS4.LStickX() >= 30)
-    setDirection(GO_TO_RIGHT);
-  else if (PS4.LStickX() <= -30)
-    setDirection(GO_TO_LEFT);
-  else if (PS4.L2() || PS4.LStickY() >= 30)
-    setDirection(GO_TO_BACK);
-  else if (PS4.R2() || PS4.LStickY() <= -30)
-    setDirection(GO_TO_FRONT);
-  else
-    setDirection(STOP);
-}
-
 void controllLogicManualAcc(){
   if (PS4.L2() && PS4.R2())
     setDirection(STOP);
@@ -356,19 +295,32 @@ void connectControll(){
   PS4.begin("D8:08:31:1F:F6:F5");
   
   bool state = HIGH;
+  float seconds = 0;
   while(!PS4.isConnected()){
     setDirection(STOP);
     digitalWrite(LED_MANUAL_X, state);
     state = !state;
     delay(250);
+
+    lcd.clear();
+    lcd.setCursor(1,1);
+    lcd.print("Aguardando Conexao");
+    lcd.setCursor(8,3);
+    lcd.print(String(seconds) + "s");
+
+    seconds = (float)(seconds + (250.0/1000.0));
+    if (seconds >= TIMEOUT)
+      break;
   }
-  setControllType(MANUAL_BASIC);
-  play(soundConnectControll);
-  //effectConnectControll();
+  setControllType(seconds >= TIMEOUT ? AUTO_PILLOT : MANUAL_BASIC);
+  play(seconds >= TIMEOUT ? soundTurnOn : soundConnectControll);
 }
 
 void setup() {
   Serial.begin(9600);
+
+  lcd.init();
+  lcd.backlight();
   
   pinMode(LEFT_FRONT, OUTPUT);
   pinMode(LEFT_BACK, OUTPUT);
@@ -382,29 +334,26 @@ void setup() {
   ledcSetup(BUZZER_CHANNEL, 2000, 8);
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);
   play(soundTurnOn);
-  //effectTurnOn();
 
-  //connectWifi();
   connectControll();
 }
 
 void loop() {
-  if (PS4.isConnected()){
-    switch(controllType){
-      case AUTO_PILLOT:
-        controllLogicAutoPillot();
-        break;
-      case MANUAL_BASIC:
-        controllLogicManualBasicAng();
-        break;
-      case MANUAL_ACC:
-        controllLogicManualAcc();
-        break;
-    }
-  }
-  else{
+  if (controllType != AUTO_PILLOT && !PS4.isConnected()){
     setDirection(STOP);
     connectControll();
+  }
+
+  switch(controllType){
+    case AUTO_PILLOT:
+      controllLogicAutoPillot();
+      break;
+    case MANUAL_BASIC:
+      controllLogicManualBasicAng();
+      break;
+    case MANUAL_ACC:
+      controllLogicManualAcc();
+      break;
   }
 
   delay(10);
